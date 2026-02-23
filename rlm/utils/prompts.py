@@ -1,7 +1,10 @@
 import textwrap
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from rlm.core.types import QueryMetadata
+
+if TYPE_CHECKING:
+    from rlm.core.types import ImageContext
 
 # System prompt for the REPL environment with explicit final answer checking
 RLM_SYSTEM_PROMPT = textwrap.dedent(
@@ -116,11 +119,55 @@ Think step by step carefully, plan, and execute this plan immediately in your re
 )
 
 
+MM_RLM_SYSTEM_PROMPT = textwrap.dedent(
+    """You are tasked with answering a query about an image. The image is available in the REPL environment as a PIL Image object named `context`. You can access, transform, and analyze it programmatically. You will be queried iteratively until you provide a final answer.
+
+The REPL environment is initialized with:
+1. A `context` variable that is a **PIL Image** object. You can inspect its size with `context.size`, crop regions with `context.crop((x1, y1, x2, y2))`, resize with `context.resize((w, h))`, convert to numpy arrays with `import numpy as np; arr = np.array(context)`, and perform any other PIL operations.
+2. An `image_query(image, prompt, model=None)` function that sends a PIL Image (or cropped region) plus a text prompt to a vision-language model and returns a text response. Use this to ask questions about specific regions, objects, or properties of the image. For example: `answer = image_query(context, "What text is visible in this image?")`.
+3. A `llm_query(prompt, model=None)` function for plain text LLM calls — useful for reasoning over text outputs from previous `image_query` calls.
+4. A `llm_query_batched(prompts, model=None)` function that runs multiple `llm_query` calls concurrently. Returns `List[str]`.
+5. A `rlm_query(prompt, model=None)` function that spawns a **recursive RLM sub-call** for subtasks requiring multi-step reasoning. Falls back to `llm_query` if recursion is not available.
+6. A `rlm_query_batched(prompts, model=None)` function for multiple concurrent recursive sub-calls.
+7. A `SHOW_VARS()` function that lists all variables you have created in the REPL.
+{custom_tools_section}
+
+**Strategy for high-resolution or complex images:**
+- Start by calling `image_query(context, "Describe this image in detail.")` to get an overview.
+- For dense images (charts, documents, scenes with many objects), crop into regions and query each region separately. Example: `region = context.crop((0, 0, w//2, h//2)); answer = image_query(region, "...")`.
+- Use `image_query_batched` if you need to query multiple regions concurrently (pass a list of (image, prompt) pairs via `llm_query_batched` after encoding manually, or use sequential `image_query` calls).
+- Combine text answers with `llm_query` to synthesize a final response.
+
+**Example — answer a question about a chart image:**
+```repl
+# First get an overview
+overview = image_query(context, "Describe all the data shown in this chart.")
+print(overview)
+```
+
+```repl
+# Zoom into a specific region if needed
+w, h = context.size
+bottom_right = context.crop((w//2, h//2, w, h))
+detail = image_query(bottom_right, "What labels and values are visible here?")
+final_answer = llm_query(f"Given this chart overview: {{overview}}\\nAnd this detail: {{detail}}\\nAnswer the original query.")
+```
+
+When you want to execute Python code in the REPL, wrap it in triple backticks with 'repl'. When done, provide your final answer using:
+1. FINAL(your answer here) — to provide the answer directly
+2. FINAL_VAR(variable_name) — to return a REPL variable as your answer (create it first in a repl block)
+
+Think step by step. Look at the image first, then plan and execute.
+"""
+)
+
+
 def build_rlm_system_prompt(
     system_prompt: str,
     query_metadata: QueryMetadata,
     custom_tools: dict[str, Any] | None = None,
-) -> list[dict[str, str]]:
+    image_context: "ImageContext | None" = None,
+) -> list[dict[str, str | list]]:
     """
     Build the initial system prompt for the REPL environment based on extra prompt metadata.
 
@@ -128,6 +175,8 @@ def build_rlm_system_prompt(
         system_prompt: The base system prompt template.
         query_metadata: QueryMetadata object containing context metadata.
         custom_tools: Optional dict of custom tools to include in the prompt.
+        image_context: Optional ImageContext. When provided, the second message embeds
+            the image so the root model can see it at the start of its context.
 
     Returns:
         List of message dictionaries
@@ -147,7 +196,7 @@ def build_rlm_system_prompt(
     tools_formatted = format_tools_for_prompt(custom_tools)
     if tools_formatted:
         custom_tools_section = (
-            f"\n6. Custom tools and data available in the REPL:\n{tools_formatted}"
+            f"\n8. Custom tools and data available in the REPL:\n{tools_formatted}"
         )
     else:
         custom_tools_section = ""
@@ -155,11 +204,34 @@ def build_rlm_system_prompt(
     # Insert custom tools section into the system prompt
     final_system_prompt = system_prompt.format(custom_tools_section=custom_tools_section)
 
-    metadata_prompt = f"Your context is a {context_type} with {context_total_length} total characters, and is broken up into chunks of char lengths: {context_lengths}."
+    if image_context is not None:
+        # Embed the image directly in the second message so the model sees it up front.
+        b64 = image_context.encode_base64(fmt="PNG")
+        img = image_context.load()
+        w, h = img.width, img.height
+        intro_text = (
+            f"Your context is an image ({w}x{h} pixels). "
+            "It is available as `context` (a PIL Image) in the REPL. "
+            "Use `image_query(context, prompt)` to ask questions about it, "
+            "or crop/resize it with PIL before querying."
+        )
+        second_message: dict[str, Any] = {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": intro_text},
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},
+            ],
+        }
+    else:
+        metadata_prompt = (
+            f"Your context is a {context_type} with {context_total_length} total characters, "
+            f"and is broken up into chunks of char lengths: {context_lengths}."
+        )
+        second_message = {"role": "user", "content": metadata_prompt}
 
     return [
         {"role": "system", "content": final_system_prompt},
-        {"role": "user", "content": metadata_prompt},
+        second_message,
     ]
 
 

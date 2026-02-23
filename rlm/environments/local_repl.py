@@ -194,6 +194,7 @@ class LocalREPL(NonIsolatedEnv):
         self.globals["llm_query_batched"] = self._llm_query_batched
         self.globals["rlm_query"] = self._rlm_query
         self.globals["rlm_query_batched"] = self._rlm_query_batched
+        self.globals["image_query"] = self._image_query
 
         # Add custom tools to globals
         # Tools can be either plain values or (value, description) tuples
@@ -342,29 +343,68 @@ class LocalREPL(NonIsolatedEnv):
         # Fall back to plain batched LM call if no recursive capability
         return self._llm_query_batched(prompts, model)
 
+    def _image_query(self, image: Any, prompt: str, model: str | None = None) -> str:
+        """Query the vision-language model with an image and a text prompt.
+
+        Encodes the image as base64 and sends it together with the prompt as an
+        OpenAI-style vision message to the LM handler.
+
+        Args:
+            image: A PIL Image object or file path (str/Path).
+            prompt: The text question or instruction about the image.
+            model: Optional model name override.
+
+        Returns:
+            The model's text response.
+        """
+        if not self.lm_handler_address:
+            return "Error: No LM handler configured"
+
+        try:
+            from rlm.utils.image_utils import build_vision_messages
+
+            vision_messages = build_vision_messages(prompt, image)
+            request = LMRequest(prompt=vision_messages, model=model, depth=self.depth)
+            response = send_lm_request(self.lm_handler_address, request)
+
+            if not response.success:
+                return f"Error: {response.error}"
+
+            self._pending_llm_calls.append(response.chat_completion)
+            return response.chat_completion.response
+        except Exception as e:
+            return f"Error: image_query failed - {e}"
+
     def load_context(self, context_payload: dict | list | str):
         """Load context into the environment as context_0 (and 'context' alias)."""
         self.add_context(context_payload, 0)
 
     def add_context(
-        self, context_payload: dict | list | str, context_index: int | None = None
+        self, context_payload: dict | list | str | Any, context_index: int | None = None
     ) -> int:
         """
         Add a context with versioned variable name.
 
         Args:
-            context_payload: The context data to add
+            context_payload: The context data to add. Can be a string, list, dict,
+                or an ImageContext wrapping an image file path or PIL Image.
             context_index: Optional explicit index. If None, auto-increments.
 
         Returns:
             The context index used.
         """
+        from rlm.core.types import ImageContext
+
         if context_index is None:
             context_index = self._context_count
 
         var_name = f"context_{context_index}"
 
-        if isinstance(context_payload, str):
+        if isinstance(context_payload, ImageContext):
+            # Load the PIL Image and store it directly in locals.
+            pil_image = context_payload.load()
+            self.locals[var_name] = pil_image
+        elif isinstance(context_payload, str):
             context_path = os.path.join(self.temp_dir, f"context_{context_index}.txt")
             with open(context_path, "w") as f:
                 f.write(context_payload)
@@ -379,7 +419,7 @@ class LocalREPL(NonIsolatedEnv):
 
         # Alias context_0 as 'context' for backward compatibility
         if context_index == 0:
-            self.execute_code(f"context = {var_name}")
+            self.locals["context"] = self.locals[var_name]
 
         self._context_count = max(self._context_count, context_index + 1)
         return context_index
@@ -468,6 +508,8 @@ class LocalREPL(NonIsolatedEnv):
                 self.globals["rlm_query"] = self._rlm_query
             elif name == "rlm_query_batched":
                 self.globals["rlm_query_batched"] = self._rlm_query_batched
+            elif name == "image_query":
+                self.globals["image_query"] = self._image_query
             elif name == "FINAL_VAR":
                 self.globals["FINAL_VAR"] = self._final_var
             elif name == "SHOW_VARS":

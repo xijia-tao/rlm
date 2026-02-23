@@ -25,8 +25,8 @@ class LMRequest:
     Supports both single prompt (prompt field) and batched prompts (prompts field).
     """
 
-    prompt: str | dict[str, Any] | None = None
-    prompts: list[str | dict[str, Any]] | None = None
+    prompt: str | dict[str, Any] | list | None = None
+    prompts: list[str | dict[str, Any] | list] | None = None
     model: str | None = None
     depth: int = 0
 

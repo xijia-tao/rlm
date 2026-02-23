@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from pathlib import Path
 from types import ModuleType
 from typing import Any, Literal
 
@@ -256,14 +257,59 @@ class RLMMetadata:
 ########################################################
 
 
+class ImageContext:
+    """
+    Wraps an image (file path or PIL Image) to pass as context to an RLM.
+
+    Usage::
+
+        from rlm import RLM, ImageContext
+        rlm = RLM(backend="openai", backend_kwargs={"model_name": "gpt-4o"}, ...)
+        result = rlm.completion(ImageContext("photo.jpg"), root_prompt="What is in this image?")
+    """
+
+    def __init__(self, source: str | Path | Any):
+        """
+        Args:
+            source: File path to an image (str or Path) or a PIL Image object.
+        """
+        self.source = source
+
+    def load(self) -> Any:
+        """Return the image as a PIL Image object."""
+        from rlm.utils.image_utils import load_image
+
+        return load_image(self.source)
+
+    def encode_base64(self, fmt: str = "PNG") -> str:
+        """Encode the image as a base64 string."""
+        from rlm.utils.image_utils import encode_image_base64
+
+        return encode_image_base64(self.source, fmt=fmt)
+
+    def get_source_path(self) -> str | None:
+        """Return the file path if source is a path, otherwise None."""
+        if isinstance(self.source, (str, Path)):
+            return str(self.source)
+        return None
+
+    def __repr__(self) -> str:
+        src = self.get_source_path() or "<PIL Image>"
+        return f"ImageContext({src!r})"
+
+
 @dataclass
 class QueryMetadata:
     context_lengths: list[int]
     context_total_length: int
     context_type: str
 
-    def __init__(self, prompt: str | list[str] | dict[Any, Any] | list[dict[Any, Any]]):
-        if isinstance(prompt, str):
+    def __init__(self, prompt: str | list[str] | dict[Any, Any] | list[dict[Any, Any]] | ImageContext):
+        if isinstance(prompt, ImageContext):
+            self.context_type = "image"
+            self.context_lengths = [0]
+            self.context_total_length = 0
+        elif isinstance(prompt, str):
             self.context_lengths = [len(prompt)]
             self.context_type = "str"
         elif isinstance(prompt, dict):
