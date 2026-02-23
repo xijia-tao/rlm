@@ -194,7 +194,7 @@ class LocalREPL(NonIsolatedEnv):
         self.globals["llm_query_batched"] = self._llm_query_batched
         self.globals["rlm_query"] = self._rlm_query
         self.globals["rlm_query_batched"] = self._rlm_query_batched
-        self.globals["image_query"] = self._image_query
+        self.globals["view_image"] = self._view_image
 
         # Add custom tools to globals
         # Tools can be either plain values or (value, description) tuples
@@ -343,11 +343,16 @@ class LocalREPL(NonIsolatedEnv):
         # Fall back to plain batched LM call if no recursive capability
         return self._llm_query_batched(prompts, model)
 
-    def _image_query(self, image: Any, prompt: str, model: str | None = None) -> str:
-        """Query the vision-language model with an image and a text prompt.
+    def _view_image(self, image: Any, prompt: str, model: str | None = None) -> str:
+        """Send a PIL image (or cropped/resized region) to the VLM with a text prompt.
 
         Encodes the image as base64 and sends it together with the prompt as an
-        OpenAI-style vision message to the LM handler.
+        OpenAI-style vision message to the LM handler, which routes to the main
+        VLM client (the same model driving this REPL session).
+
+        Resize or crop `image` before calling to control how many tokens are spent:
+            small = context.resize((512, 512))
+            answer = view_image(small, "What objects are visible?")
 
         Args:
             image: A PIL Image object or file path (str/Path).
@@ -355,7 +360,7 @@ class LocalREPL(NonIsolatedEnv):
             model: Optional model name override.
 
         Returns:
-            The model's text response.
+            The VLM's text response.
         """
         if not self.lm_handler_address:
             return "Error: No LM handler configured"
@@ -373,7 +378,7 @@ class LocalREPL(NonIsolatedEnv):
             self._pending_llm_calls.append(response.chat_completion)
             return response.chat_completion.response
         except Exception as e:
-            return f"Error: image_query failed - {e}"
+            return f"Error: view_image failed - {e}"
 
     def load_context(self, context_payload: dict | list | str):
         """Load context into the environment as context_0 (and 'context' alias)."""
@@ -508,8 +513,8 @@ class LocalREPL(NonIsolatedEnv):
                 self.globals["rlm_query"] = self._rlm_query
             elif name == "rlm_query_batched":
                 self.globals["rlm_query_batched"] = self._rlm_query_batched
-            elif name == "image_query":
-                self.globals["image_query"] = self._image_query
+            elif name == "view_image":
+                self.globals["view_image"] = self._view_image
             elif name == "FINAL_VAR":
                 self.globals["FINAL_VAR"] = self._final_var
             elif name == "SHOW_VARS":

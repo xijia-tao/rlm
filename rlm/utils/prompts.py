@@ -120,12 +120,12 @@ Think step by step carefully, plan, and execute this plan immediately in your re
 
 
 MM_RLM_SYSTEM_PROMPT = textwrap.dedent(
-    """You are tasked with answering a query about an image. The image is available in the REPL environment as a PIL Image object named `context`. You can access, transform, and analyze it programmatically. You will be queried iteratively until you provide a final answer.
+    """You are tasked with answering a query about an image. The image is available in the REPL environment as a PIL Image object named `context`. You are a vision-language model (VLM), but you are NOT shown the image upfront — you must explicitly request to see it (or a region of it) using `view_image`. This lets you control how many image tokens you spend and focus on the parts that matter.
 
 The REPL environment is initialized with:
-1. A `context` variable that is a **PIL Image** object. You can inspect its size with `context.size`, crop regions with `context.crop((x1, y1, x2, y2))`, resize with `context.resize((w, h))`, convert to numpy arrays with `import numpy as np; arr = np.array(context)`, and perform any other PIL operations.
-2. An `image_query(image, prompt, model=None)` function that sends a PIL Image (or cropped region) plus a text prompt to a vision-language model and returns a text response. Use this to ask questions about specific regions, objects, or properties of the image. For example: `answer = image_query(context, "What text is visible in this image?")`.
-3. A `llm_query(prompt, model=None)` function for plain text LLM calls — useful for reasoning over text outputs from previous `image_query` calls.
+1. A `context` variable that is a **PIL Image** object. You can inspect its dimensions with `context.size`, crop regions with `context.crop((x1, y1, x2, y2))`, resize with `context.resize((w, h))`, convert to numpy arrays with `import numpy as np; arr = np.array(context)`, and perform any other PIL operations — all without consuming image tokens.
+2. A `view_image(image, prompt, model=None)` function that sends a PIL Image (or any cropped/resized region) plus a text prompt to yourself (this VLM) and returns a text response. This is how you actually see the image content. **Always resize or crop before calling to avoid processing an unnecessarily large image.** Example: `answer = view_image(context.resize((512, 512)), "What is shown in this image?")`.
+3. A `llm_query(prompt, model=None)` function for plain text LLM calls — useful for reasoning over text outputs from previous `view_image` calls.
 4. A `llm_query_batched(prompts, model=None)` function that runs multiple `llm_query` calls concurrently. Returns `List[str]`.
 5. A `rlm_query(prompt, model=None)` function that spawns a **recursive RLM sub-call** for subtasks requiring multi-step reasoning. Falls back to `llm_query` if recursion is not available.
 6. A `rlm_query_batched(prompts, model=None)` function for multiple concurrent recursive sub-calls.
@@ -133,23 +133,26 @@ The REPL environment is initialized with:
 {custom_tools_section}
 
 **Strategy for high-resolution or complex images:**
-- Start by calling `image_query(context, "Describe this image in detail.")` to get an overview.
-- For dense images (charts, documents, scenes with many objects), crop into regions and query each region separately. Example: `region = context.crop((0, 0, w//2, h//2)); answer = image_query(region, "...")`.
-- Use `image_query_batched` if you need to query multiple regions concurrently (pass a list of (image, prompt) pairs via `llm_query_batched` after encoding manually, or use sequential `image_query` calls).
+- Start by getting a low-resolution overview: `overview = view_image(context.resize((512, 512)), "Describe this image in detail.")`.
+- Use `context.size` to learn the original dimensions, then crop into regions of interest and call `view_image` on each crop.
+- For dense images (charts, documents, scenes with many objects), crop into regions and query each region separately. Example: `region = context.crop((0, 0, w//2, h//2)); answer = view_image(region.resize((512, 512)), "...")`.
 - Combine text answers with `llm_query` to synthesize a final response.
 
 **Example — answer a question about a chart image:**
 ```repl
-# First get an overview
-overview = image_query(context, "Describe all the data shown in this chart.")
+# Check image dimensions first
+w, h = context.size
+print(f"Image size: {{w}}x{{h}}")
+
+# Get a low-res overview without processing the full image
+overview = view_image(context.resize((768, 768)), "Describe all the data shown in this chart.")
 print(overview)
 ```
 
 ```repl
 # Zoom into a specific region if needed
-w, h = context.size
 bottom_right = context.crop((w//2, h//2, w, h))
-detail = image_query(bottom_right, "What labels and values are visible here?")
+detail = view_image(bottom_right.resize((512, 512)), "What labels and values are visible here?")
 final_answer = llm_query(f"Given this chart overview: {{overview}}\\nAnd this detail: {{detail}}\\nAnswer the original query.")
 ```
 
@@ -157,7 +160,7 @@ When you want to execute Python code in the REPL, wrap it in triple backticks wi
 1. FINAL(your answer here) — to provide the answer directly
 2. FINAL_VAR(variable_name) — to return a REPL variable as your answer (create it first in a repl block)
 
-Think step by step. Look at the image first, then plan and execute.
+Think step by step. Check the image dimensions, plan what regions to look at, then call `view_image` on the relevant parts.
 """
 )
 
@@ -205,23 +208,16 @@ def build_rlm_system_prompt(
     final_system_prompt = system_prompt.format(custom_tools_section=custom_tools_section)
 
     if image_context is not None:
-        # Embed the image directly in the second message so the model sees it up front.
-        b64 = image_context.encode_base64(fmt="PNG")
+        # Describe image dimensions only — the image itself is NOT sent upfront.
+        # The VLM will call view_image() from the REPL when it wants to see the image.
         img = image_context.load()
         w, h = img.width, img.height
         intro_text = (
-            f"Your context is an image ({w}x{h} pixels). "
-            "It is available as `context` (a PIL Image) in the REPL. "
-            "Use `image_query(context, prompt)` to ask questions about it, "
-            "or crop/resize it with PIL before querying."
+            f"Your context is a {w}x{h} pixel image available as `context` (a PIL Image) in the REPL. "
+            "You are not shown the image yet. "
+            "Use PIL operations (resize, crop, etc.) and `view_image(image, prompt)` to inspect it."
         )
-        second_message: dict[str, Any] = {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": intro_text},
-                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},
-            ],
-        }
+        second_message: dict[str, Any] = {"role": "user", "content": intro_text}
     else:
         metadata_prompt = (
             f"Your context is a {context_type} with {context_total_length} total characters, "

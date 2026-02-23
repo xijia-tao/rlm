@@ -1,8 +1,12 @@
 """
 Multimodal RLM example: answering questions about a high-resolution image.
 
-The RLM receives an image as context (via ImageContext) and uses the Python
-REPL + image_query() to programmatically explore, crop, and reason over it.
+The RLM receives an image as context (via ImageContext). The image is loaded
+as a PIL Image into the REPL as `context`, but is NOT sent to the VLM upfront.
+The VLM inspects `context.size`, resizes/crops regions with PIL, then calls
+`view_image(region, prompt)` to send a (cheaper, smaller) image to itself and
+get a text response. This avoids burning a large number of image tokens on an
+image that may not need to be seen at full resolution.
 
 Requirements:
     pip install pillow
@@ -66,8 +70,16 @@ rlm = RLM(
 
 result = rlm.completion(
     ImageContext(image_path),
-    root_prompt="Describe all the shapes and colors you see. Then count how many distinct colored regions there are.",
+    root_prompt=(
+        "Describe all the shapes and colors you see. "
+        "Then count how many distinct colored regions there are."
+    ),
 )
+# The VLM will not see the image until it calls view_image() from the REPL, e.g.:
+#   w, h = context.size
+#   overview = view_image(context.resize((512, 512)), "Describe all shapes and colors.")
+#   region = context.crop((0, 0, w//2, h//2))
+#   detail = view_image(region, "What colored shapes are in this region?")
 
 print("\n=== Final Answer ===")
 print(result.response)

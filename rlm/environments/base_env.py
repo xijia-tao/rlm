@@ -16,7 +16,7 @@ RESERVED_TOOL_NAMES: frozenset[str] = frozenset(
         "llm_query_batched",
         "rlm_query",
         "rlm_query_batched",
-        "image_query",
+        "view_image",
         "FINAL_VAR",
         "SHOW_VARS",
         "context",
@@ -177,6 +177,7 @@ class SupportsCustomTools(Protocol):
         The following names cannot be used as custom tool names:
         - llm_query, llm_query_batched: Single LM completion functions (no tool access)
         - rlm_query, rlm_query_batched: Recursive RLM calls for deeper thinking subtasks
+        - view_image: Send a PIL image to the VLM and get a text response
         - FINAL_VAR, SHOW_VARS: Built-in helper functions
         - context, history: The input context and conversation history variables
 
