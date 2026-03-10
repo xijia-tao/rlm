@@ -1,20 +1,23 @@
 ---
-layout: default
+
+## layout: default
 title: RLM Class
 parent: API Reference
 nav_order: 1
----
 
 # RLM Class Reference
+
 {: .no_toc }
 
-Complete API documentation for the core RLM class.
-{: .fs-6 .fw-300 }
+Complete API documentation for the core RLM class.  
+{: .fs-6 .fw-300 }inp
 
 ## Table of Contents
+
 {: .no_toc .text-delta }
 
 1. TOC
+
 {:toc}
 
 ---
@@ -69,6 +72,7 @@ RLM(
 ### Parameters
 
 #### `backend`
+
 {: .no_toc }
 
 **Type:** `Literal["openai", "portkey", "openrouter", "vllm", "litellm", "anthropic"]`
@@ -90,6 +94,7 @@ rlm = RLM(backend="vllm", ...)
 ---
 
 #### `backend_kwargs`
+
 {: .no_toc }
 
 **Type:** `dict[str, Any] | None`
@@ -97,14 +102,16 @@ rlm = RLM(backend="vllm", ...)
 
 Configuration passed to the LM client. Required fields vary by backend:
 
-| Backend | Required | Optional |
-|:--------|:---------|:---------|
-| `openai` | `model_name` | `api_key`, `base_url` |
-| `anthropic` | `model_name` | `api_key` |
-| `portkey` | `model_name`, `api_key` | `base_url` |
-| `openrouter` | `model_name` | `api_key` |
-| `vllm` | `model_name`, `base_url` | — |
-| `litellm` | `model_name` | varies by provider |
+
+| Backend      | Required                 | Optional              |
+| ------------ | ------------------------ | --------------------- |
+| `openai`     | `model_name`             | `api_key`, `base_url` |
+| `anthropic`  | `model_name`             | `api_key`             |
+| `portkey`    | `model_name`, `api_key`  | `base_url`            |
+| `openrouter` | `model_name`             | `api_key`             |
+| `vllm`       | `model_name`, `base_url` | —                     |
+| `litellm`    | `model_name`             | varies by provider    |
+
 
 ```python
 backend_kwargs = {
@@ -117,6 +124,7 @@ backend_kwargs = {
 ---
 
 #### `environment`
+
 {: .no_toc }
 
 **Type:** `Literal["local", "docker", "modal", "prime", "daytona", "e2b"]`
@@ -124,18 +132,21 @@ backend_kwargs = {
 
 The execution environment for running generated code.
 
-| Environment | Description |
-|:------------|:------------|
-| `local` | Same-process execution with sandboxed builtins (default) |
-| `docker` | Containerized execution in Docker |
-| `modal` | Cloud sandbox via Modal |
-| `prime` | Cloud sandbox via Prime Intellect |
-| `daytona` | Cloud sandbox via Daytona |
-| `e2b` | Cloud sandbox via E2B |
+
+| Environment | Description                                              |
+| ----------- | -------------------------------------------------------- |
+| `local`     | Same-process execution with sandboxed builtins (default) |
+| `docker`    | Containerized execution in Docker                        |
+| `modal`     | Cloud sandbox via Modal                                  |
+| `prime`     | Cloud sandbox via Prime Intellect                        |
+| `daytona`   | Cloud sandbox via Daytona                                |
+| `e2b`       | Cloud sandbox via E2B                                    |
+
 
 ---
 
 #### `environment_kwargs`
+
 {: .no_toc }
 
 **Type:** `dict[str, Any] | None`
@@ -144,6 +155,7 @@ The execution environment for running generated code.
 Configuration for the execution environment:
 
 **Local:**
+
 ```python
 environment_kwargs = {
     "setup_code": "import numpy as np",  # Run before each completion
@@ -151,6 +163,7 @@ environment_kwargs = {
 ```
 
 **Docker:**
+
 ```python
 environment_kwargs = {
     "image": "python:3.11-slim",  # Docker image
@@ -158,6 +171,7 @@ environment_kwargs = {
 ```
 
 **Modal:**
+
 ```python
 environment_kwargs = {
     "app_name": "my-rlm-app",  # Modal app name
@@ -169,6 +183,7 @@ environment_kwargs = {
 ---
 
 #### `max_depth`
+
 {: .no_toc }
 
 **Type:** `int`
@@ -186,6 +201,7 @@ rlm = RLM(..., max_depth=2)
 ---
 
 #### `max_iterations`
+
 {: .no_toc }
 
 **Type:** `int`
@@ -194,6 +210,7 @@ rlm = RLM(..., max_depth=2)
 Maximum number of REPL iterations before forcing a final answer.
 
 Each iteration consists of:
+
 1. LM generates response (potentially with code blocks)
 2. Code blocks are executed
 3. Results are appended to conversation history
@@ -206,6 +223,7 @@ rlm = RLM(..., max_iterations=50)
 ---
 
 #### `max_budget`
+
 {: .no_toc }
 
 **Type:** `float | None`
@@ -216,6 +234,7 @@ Maximum total USD cost for a completion. If exceeded, raises `BudgetExceededErro
 ---
 
 #### `max_timeout`
+
 {: .no_toc }
 
 **Type:** `float | None`
@@ -226,6 +245,7 @@ Maximum wall-clock seconds for a completion. If exceeded, raises `TimeoutExceede
 ---
 
 #### `max_tokens`
+
 {: .no_toc }
 
 **Type:** `int | None`
@@ -236,6 +256,7 @@ Maximum total tokens (input + output) for a completion. If exceeded, raises `Tok
 ---
 
 #### `max_errors`
+
 {: .no_toc }
 
 **Type:** `int | None`
@@ -246,12 +267,14 @@ Maximum consecutive REPL errors before aborting. The error counter resets on a s
 ---
 
 #### `custom_system_prompt`
+
 {: .no_toc }
 
 **Type:** `str | None`
 **Default:** `None`
 
 Override the default RLM system prompt. The default prompt instructs the LM on:
+
 - How to use the `context` variable
 - How to call `llm_query()` / `llm_query_batched()` for plain LM calls
 - How to call `rlm_query()` / `rlm_query_batched()` for recursive sub-calls
@@ -268,6 +291,7 @@ rlm = RLM(..., custom_system_prompt=custom_prompt)
 ---
 
 #### `other_backends` / `other_backend_kwargs`
+
 {: .no_toc }
 
 **Type:** `list[str] | None` / `list[dict] | None`
@@ -293,6 +317,7 @@ rlm = RLM(
 ---
 
 #### `logger`
+
 {: .no_toc }
 
 **Type:** `RLMLogger | None`
@@ -315,12 +340,14 @@ rlm = RLM(..., logger=logger)
 ---
 
 #### `verbose`
+
 {: .no_toc }
 
 **Type:** `bool`
 **Default:** `False`
 
 Enable rich console output showing:
+
 - Metadata at startup
 - Each iteration's response
 - Code execution results
@@ -329,6 +356,7 @@ Enable rich console output showing:
 ---
 
 #### `persistent`
+
 {: .no_toc }
 
 **Type:** `bool`
@@ -349,6 +377,7 @@ with RLM(..., persistent=True) as rlm:
 ---
 
 #### `custom_tools`
+
 {: .no_toc }
 
 **Type:** `dict[str, Any] | None`
@@ -377,6 +406,7 @@ Reserved names (`llm_query`, `rlm_query`, `context`, `history`, `FINAL_VAR`, `SH
 ---
 
 #### `custom_sub_tools`
+
 {: .no_toc }
 
 **Type:** `dict[str, Any] | None`
@@ -387,6 +417,7 @@ Separate set of custom tools for child RLMs spawned via `rlm_query()`. If `None`
 ---
 
 #### `compaction`
+
 {: .no_toc }
 
 **Type:** `bool`
@@ -397,6 +428,7 @@ When enabled, automatically summarizes the conversation history when token usage
 ---
 
 #### `compaction_threshold_pct`
+
 {: .no_toc }
 
 **Type:** `float`
@@ -407,16 +439,19 @@ Fraction of the model's context window that triggers compaction. Only used when 
 ---
 
 #### Event Callbacks
+
 {: .no_toc }
 
 Optional callbacks for monitoring execution progress:
 
-| Callback | Signature | Triggered when |
-|:---------|:----------|:---------------|
-| `on_iteration_start` | `(depth: int, iteration_num: int)` | An iteration begins |
-| `on_iteration_complete` | `(depth: int, iteration_num: int, duration: float)` | An iteration completes |
-| `on_subcall_start` | `(depth: int, model: str, prompt_preview: str)` | A child RLM is spawned |
-| `on_subcall_complete` | `(depth: int, model: str, duration: float, error: str \| None)` | A child RLM finishes |
+
+| Callback                | Signature                                                      | Triggered when         |
+| ----------------------- | -------------------------------------------------------------- | ---------------------- |
+| `on_iteration_start`    | `(depth: int, iteration_num: int)`                             | An iteration begins    |
+| `on_iteration_complete` | `(depth: int, iteration_num: int, duration: float)`            | An iteration completes |
+| `on_subcall_start`      | `(depth: int, model: str, prompt_preview: str)`                | A child RLM is spawned |
+| `on_subcall_complete`   | `(depth: int, model: str, duration: float, error: str | None)` | A child RLM finishes   |
+
 
 ---
 
@@ -436,7 +471,7 @@ def completion(
 
 #### Parameters
 
-**`prompt`**
+`**prompt**`
 {: .no_toc }
 
 The context/input to process. Becomes the `context` variable in the REPL.
@@ -455,7 +490,7 @@ result = rlm.completion({
 result = rlm.completion(["doc1", "doc2", "doc3"])
 ```
 
-**`root_prompt`**
+`**root_prompt**`
 {: .no_toc }
 
 Optional short prompt shown to the root LM on every iteration. Useful for Q&A tasks where the question should be visible throughout.
@@ -544,15 +579,17 @@ usage.to_dict()
 
 The following functions are available to model-generated code inside the REPL:
 
-| Function | Description |
-|:---------|:------------|
-| `llm_query(prompt, model=None)` | Single plain LM completion. Fast, no REPL or iteration. |
-| `llm_query_batched(prompts, model=None)` | Multiple plain LM completions concurrently. |
-| `rlm_query(prompt, model=None)` | Spawn a child RLM with its own REPL for deeper thinking. Falls back to `llm_query` at max depth. |
-| `rlm_query_batched(prompts, model=None)` | Spawn multiple child RLMs. Falls back to `llm_query_batched` at max depth. |
-| `FINAL_VAR(variable_name)` | Return a REPL variable as the final answer. |
-| `SHOW_VARS()` | List all user-created variables in the REPL. |
-| `print(...)` | Print output visible to the model in the next iteration. |
+
+| Function                                 | Description                                                                                      |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `llm_query(prompt, model=None)`          | Single plain LM completion. Fast, no REPL or iteration.                                          |
+| `llm_query_batched(prompts, model=None)` | Multiple plain LM completions concurrently.                                                      |
+| `rlm_query(prompt, model=None)`          | Spawn a child RLM with its own REPL for deeper thinking. Falls back to `llm_query` at max depth. |
+| `rlm_query_batched(prompts, model=None)` | Spawn multiple child RLMs. Falls back to `llm_query_batched` at max depth.                       |
+| `FINAL_VAR(variable_name)`               | Return a REPL variable as the final answer.                                                      |
+| `SHOW_VARS()`                            | List all user-created variables in the REPL.                                                     |
+| `print(...)`                             | Print output visible to the model in the next iteration.                                         |
+
 
 ---
 
@@ -574,13 +611,15 @@ If the RLM exhausts `max_iterations` without finding a `FINAL()` / `FINAL_VAR()`
 
 RLM raises explicit exceptions when limits are exceeded:
 
-| Exception | Raised when | Key attributes |
-|:----------|:------------|:---------------|
-| `BudgetExceededError` | `max_budget` exceeded | `spent`, `budget` |
-| `TimeoutExceededError` | `max_timeout` exceeded | `elapsed`, `timeout`, `partial_answer` |
-| `TokenLimitExceededError` | `max_tokens` exceeded | `tokens_used`, `token_limit`, `partial_answer` |
-| `ErrorThresholdExceededError` | `max_errors` consecutive errors | `error_count`, `threshold`, `last_error`, `partial_answer` |
-| `CancellationError` | `KeyboardInterrupt` during completion | `partial_answer` |
+
+| Exception                     | Raised when                           | Key attributes                                             |
+| ----------------------------- | ------------------------------------- | ---------------------------------------------------------- |
+| `BudgetExceededError`         | `max_budget` exceeded                 | `spent`, `budget`                                          |
+| `TimeoutExceededError`        | `max_timeout` exceeded                | `elapsed`, `timeout`, `partial_answer`                     |
+| `TokenLimitExceededError`     | `max_tokens` exceeded                 | `tokens_used`, `token_limit`, `partial_answer`             |
+| `ErrorThresholdExceededError` | `max_errors` consecutive errors       | `error_count`, `threshold`, `last_error`, `partial_answer` |
+| `CancellationError`           | `KeyboardInterrupt` during completion | `partial_answer`                                           |
+
 
 All exceptions are importable from the top-level package:
 
@@ -600,6 +639,7 @@ except CancellationError as e:
 ## Thread Safety
 
 Each `completion()` call:
+
 1. Spawns its own `LMHandler` socket server
 2. Creates a fresh environment instance (unless persistent)
 3. Cleans up both when done
@@ -666,3 +706,4 @@ result = rlm.completion(
 print(result.response)
 print(result.metadata)  # Full trajectory (iterations, sub-calls, etc.)
 ```
+

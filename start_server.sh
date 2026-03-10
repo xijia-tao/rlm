@@ -1,0 +1,1 @@
+vllm serve Qwen/Qwen3-VL-8B-Instruct --port 11434 --host 0.0.0.0

@@ -58,10 +58,7 @@ image_path = os.environ.get("IMAGE_PATH") or make_demo_image()
 
 rlm = RLM(
     backend="openai",
-    backend_kwargs={
-        "model_name": "gpt-4o-mini",  # any vision-capable model
-        "api_key": os.getenv("OPENAI_API_KEY"),
-    },
+    backend_kwargs={"model_name": "Qwen/Qwen3-VL-8B-Instruct", "base_url": "http://localhost:11434/v1", "api_key": "openai"},
     environment="local",
     max_depth=1,
     max_iterations=10,
