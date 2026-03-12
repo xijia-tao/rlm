@@ -1,5 +1,5 @@
 from rlm.core.rlm import RLM
-from rlm.core.types import ImageContext
+from rlm.core.types import ImageContext, VideoContext
 from rlm.utils.exceptions import (
     BudgetExceededError,
     CancellationError,
@@ -11,6 +11,7 @@ from rlm.utils.exceptions import (
 __all__ = [
     "RLM",
     "ImageContext",
+    "VideoContext",
     "BudgetExceededError",
     "TimeoutExceededError",
     "TokenLimitExceededError",

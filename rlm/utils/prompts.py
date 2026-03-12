@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any
 from rlm.core.types import QueryMetadata
 
 if TYPE_CHECKING:
-    from rlm.core.types import ImageContext
+    from rlm.core.types import ImageContext, VideoContext
 
 # System prompt for the REPL environment with explicit final answer checking
 RLM_SYSTEM_PROMPT = textwrap.dedent(
@@ -165,11 +165,70 @@ Think step by step. Check the image dimensions, plan what regions to look at, th
 )
 
 
+MM_VIDEO_RLM_SYSTEM_PROMPT = textwrap.dedent(
+    """You are tasked with answering a query about a video. The video is available in the REPL as a `VideoContext` object named `context`. You are a vision-language model (VLM), but you are NOT shown any frames upfront — you must explicitly request frames using `context.get_frame()`, `context.sample_frames()`, or `context.get_frame_at_index()`, then call `view_image()` to visually inspect them. This lets you control which parts of the video you spend tokens on.
+
+The REPL environment is initialized with:
+1. A `context` variable that is a **VideoContext** object. Its key methods:
+   - `context.metadata` — returns a `VideoMetadata` with: `duration_sec`, `fps`, `width`, `height`, `total_frames`, and `duration_str` (human-readable). Always check this first.
+   - `context.sample_frames(n)` — uniformly samples `n` frames across the video; returns a list of `(timestamp_sec, PIL Image)` tuples. Use this for an initial survey (e.g. `n=8` or `n=16`).
+   - `context.get_frame(timestamp_sec)` — returns a PIL Image at the exact time (seconds). Use this to zoom into a specific moment.
+   - `context.get_frames(timestamps)` — batch-fetches frames at multiple timestamps; more efficient than repeated `get_frame()` calls.
+   - `context.get_frame_at_index(index)` — returns a PIL Image at a specific 0-based frame index.
+2. A `view_image(image, prompt, model=None)` function that sends a PIL Image plus a text prompt to this VLM and returns a text response. **Always resize or crop before calling** to avoid wasting tokens. Example: `answer = view_image(frame.resize((512, 512)), "Describe what is happening.")`.
+3. A `llm_query(prompt, model=None)` function for plain text LLM calls — useful for reasoning over text gathered from multiple `view_image` calls.
+4. A `llm_query_batched(prompts, model=None)` function that runs multiple `llm_query` calls concurrently. Returns `List[str]`.
+5. A `rlm_query(prompt, model=None)` function that spawns a **recursive RLM sub-call** for subtasks requiring multi-step reasoning.
+6. A `rlm_query_batched(prompts, model=None)` function for multiple concurrent recursive sub-calls.
+7. A `SHOW_VARS()` function that lists all variables you have created in the REPL.
+{custom_tools_section}
+
+**Strategy for video understanding:**
+- **Always start** by checking metadata: `meta = context.metadata; print(meta)`.
+- **Survey first**: call `context.sample_frames(8)` and `view_image` each frame at low res to get a broad overview before zooming in.
+- **Seek precisely**: once you know approximately when an event occurs, call `context.get_frame(t)` for targeted inspection.
+- **Batch for efficiency**: use `context.get_frames([t1, t2, ...])` when you need several specific moments.
+- **Synthesize in text**: accumulate descriptions from `view_image` calls into variables, then use `llm_query` to reason over them.
+
+**Example — answer a question about a video:**
+```repl
+# Step 1: check metadata
+meta = context.metadata
+print(meta)  # duration, fps, resolution
+```
+
+```repl
+# Step 2: survey with uniformly sampled frames
+sampled = context.sample_frames(8)
+descriptions = []
+for t, frame in sampled:
+    desc = view_image(frame.resize((512, 512)), f"At {t:.1f}s: briefly describe the main action or scene.")
+    descriptions.append(f"t={t:.1f}s: {desc}")
+    print(descriptions[-1])
+```
+
+```repl
+# Step 3: if a specific moment is relevant, zoom in
+frame = context.get_frame(12.5)
+detail = view_image(frame.resize((768, 768)), "What specific object or action is visible here?")
+final_answer = llm_query(f"Based on these video observations:\\n" + "\\n".join(descriptions) + f"\\nDetail at 12.5s: {detail}\\nAnswer the question: {{question}}")
+```
+
+When you want to execute Python code in the REPL, wrap it in triple backticks with 'repl'. When done, provide your final answer using:
+1. FINAL(your answer here) — to provide the answer directly
+2. FINAL_VAR(variable_name) — to return a REPL variable as your answer (create it first in a repl block)
+
+Think step by step: check metadata, survey frames, zoom in on relevant moments, then synthesize your answer.
+"""
+)
+
+
 def build_rlm_system_prompt(
     system_prompt: str,
     query_metadata: QueryMetadata,
     custom_tools: dict[str, Any] | None = None,
     image_context: "ImageContext | None" = None,
+    video_context: "VideoContext | None" = None,
 ) -> list[dict[str, str | list]]:
     """
     Build the initial system prompt for the REPL environment based on extra prompt metadata.
@@ -207,7 +266,20 @@ def build_rlm_system_prompt(
     # Insert custom tools section into the system prompt
     final_system_prompt = system_prompt.format(custom_tools_section=custom_tools_section)
 
-    if image_context is not None:
+    if video_context is not None:
+        meta = video_context.metadata
+        intro_text = (
+            f"Your context is a video available as `context` (a VideoContext) in the REPL. "
+            f"Duration: {meta.duration_str} ({meta.duration_sec:.1f}s), "
+            f"FPS: {meta.fps:.2f}, Resolution: {meta.width}x{meta.height}, "
+            f"Total frames: {meta.total_frames}. "
+            "You are not shown any frames yet. "
+            "Use `context.sample_frames(n)` for a quick survey, "
+            "`context.get_frame(t)` for a specific timestamp, "
+            "and `view_image(frame, prompt)` to visually inspect any frame."
+        )
+        second_message: dict[str, Any] = {"role": "user", "content": intro_text}
+    elif image_context is not None:
         # Describe image dimensions only — the image itself is NOT sent upfront.
         # The VLM will call view_image() from the REPL when it wants to see the image.
         img = image_context.load()
@@ -217,7 +289,7 @@ def build_rlm_system_prompt(
             "You are not shown the image yet. "
             "Use PIL operations (resize, crop, etc.) and `view_image(image, prompt)` to inspect it."
         )
-        second_message: dict[str, Any] = {"role": "user", "content": intro_text}
+        second_message = {"role": "user", "content": intro_text}
     else:
         metadata_prompt = (
             f"Your context is a {context_type} with {context_total_length} total characters, "

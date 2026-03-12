@@ -257,6 +257,197 @@ class RLMMetadata:
 ########################################################
 
 
+@dataclass
+class VideoMetadata:
+    """Metadata for a video file."""
+
+    duration_sec: float
+    fps: float
+    width: int
+    height: int
+    total_frames: int
+
+    @property
+    def duration_str(self) -> str:
+        minutes = int(self.duration_sec // 60)
+        seconds = self.duration_sec % 60
+        return f"{minutes}m{seconds:.1f}s"
+
+    def __repr__(self) -> str:
+        return (
+            f"VideoMetadata(duration={self.duration_str}, fps={self.fps:.2f}, "
+            f"resolution={self.width}x{self.height}, total_frames={self.total_frames})"
+        )
+
+
+class VideoContext:
+    """
+    Wraps a video file to pass as context to an RLM.
+
+    The model can inspect the video on demand by sampling or seeking to specific
+    frames, then calling ``view_image()`` to visually examine them.
+
+    Usage::
+
+        from rlm import RLM, VideoContext
+        rlm = RLM(backend="openai", backend_kwargs={"model_name": "gpt-4o"}, ...)
+        result = rlm.completion(
+            VideoContext("video.mp4"),
+            root_prompt="What happens at the beginning of this video?",
+        )
+
+    Requires ``opencv-python``::
+
+        pip install opencv-python
+    """
+
+    def __init__(self, source: str | Path):
+        """
+        Args:
+            source: File path to a video file (str or Path).
+        """
+        self.source = Path(source)
+        self._metadata: VideoMetadata | None = None
+
+    def _open_cap(self) -> tuple[Any, Any]:
+        """Open a cv2 VideoCapture. Caller must call cap.release()."""
+        try:
+            import cv2
+        except ImportError:
+            raise ImportError(
+                "opencv-python is required for VideoContext. "
+                "Install it with: pip install opencv-python"
+            ) from None
+        cap = cv2.VideoCapture(str(self.source))
+        if not cap.isOpened():
+            raise ValueError(f"Could not open video file: {self.source}")
+        return cap, cv2
+
+    @property
+    def metadata(self) -> "VideoMetadata":
+        """Return video metadata (lazy-loaded and cached)."""
+        if self._metadata is None:
+            cap, cv2 = self._open_cap()
+            try:
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                duration_sec = total_frames / fps if fps > 0 else 0.0
+                self._metadata = VideoMetadata(
+                    duration_sec=duration_sec,
+                    fps=fps,
+                    width=width,
+                    height=height,
+                    total_frames=total_frames,
+                )
+            finally:
+                cap.release()
+        return self._metadata
+
+    def get_frame(self, timestamp_sec: float) -> Any:
+        """
+        Return a PIL Image of the frame at the given timestamp.
+
+        Args:
+            timestamp_sec: Time in seconds. Clamped to [0, duration].
+
+        Returns:
+            PIL Image (RGB).
+        """
+        from PIL import Image
+
+        cap, cv2 = self._open_cap()
+        try:
+            meta = self.metadata
+            timestamp_sec = max(0.0, min(timestamp_sec, meta.duration_sec))
+            frame_idx = int(timestamp_sec * meta.fps)
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+            ret, frame = cap.read()
+            if not ret:
+                raise ValueError(
+                    f"Could not read frame at {timestamp_sec:.2f}s (index {frame_idx})"
+                )
+            return Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        finally:
+            cap.release()
+
+    def get_frames(self, timestamps: list[float]) -> list[Any]:
+        """
+        Return PIL Images for each of the given timestamps.
+
+        Keeps the video capture open across all seeks, which is more efficient
+        than calling ``get_frame()`` in a loop.
+
+        Args:
+            timestamps: List of times in seconds.
+
+        Returns:
+            List of PIL Images in the same order as input.
+        """
+        from PIL import Image
+
+        cap, cv2 = self._open_cap()
+        try:
+            meta = self.metadata
+            results = []
+            for t in timestamps:
+                t = max(0.0, min(t, meta.duration_sec))
+                frame_idx = int(t * meta.fps)
+                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+                ret, frame = cap.read()
+                if not ret:
+                    raise ValueError(
+                        f"Could not read frame at {t:.2f}s (index {frame_idx})"
+                    )
+                results.append(Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)))
+            return results
+        finally:
+            cap.release()
+
+    def sample_frames(self, n: int = 8) -> list[tuple[float, Any]]:
+        """
+        Uniformly sample ``n`` frames from the video.
+
+        Timestamps are placed at the midpoints of ``n`` equal-length segments,
+        avoiding boundary frames that may be black or incomplete.
+
+        Args:
+            n: Number of frames to sample (default 8).
+
+        Returns:
+            List of ``(timestamp_sec, PIL Image)`` tuples.
+        """
+        if n <= 0:
+            return []
+        meta = self.metadata
+        # Midpoints of n equal segments: t_i = (2i+1) / (2n) * duration
+        timestamps = [meta.duration_sec * (2 * i + 1) / (2 * n) for i in range(n)]
+        frames = self.get_frames(timestamps)
+        return list(zip(timestamps, frames, strict=True))
+
+    def get_frame_at_index(self, index: int) -> Any:
+        """
+        Return a PIL Image of the frame at the given 0-based frame index.
+
+        Args:
+            index: Frame index. Clamped to [0, total_frames - 1].
+
+        Returns:
+            PIL Image (RGB).
+        """
+        meta = self.metadata
+        index = max(0, min(index, meta.total_frames - 1))
+        return self.get_frame(index / meta.fps)
+
+    def get_source_path(self) -> str:
+        """Return the file path as a string."""
+        return str(self.source)
+
+    def __repr__(self) -> str:
+        return f"VideoContext({str(self.source)!r})"
+
+
 class ImageContext:
     """
     Wraps an image (file path or PIL Image) to pass as context to an RLM.
@@ -304,8 +495,15 @@ class QueryMetadata:
     context_total_length: int
     context_type: str
 
-    def __init__(self, prompt: str | list[str] | dict[Any, Any] | list[dict[Any, Any]] | ImageContext):
-        if isinstance(prompt, ImageContext):
+    def __init__(
+        self,
+        prompt: "str | list[str] | dict[Any, Any] | list[dict[Any, Any]] | ImageContext | VideoContext",
+    ):
+        if isinstance(prompt, VideoContext):
+            self.context_type = "video"
+            self.context_lengths = [0]
+            self.context_total_length = 0
+        elif isinstance(prompt, ImageContext):
             self.context_type = "image"
             self.context_lengths = [0]
             self.context_total_length = 0

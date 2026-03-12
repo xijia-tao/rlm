@@ -15,6 +15,7 @@ from rlm.core.types import (
     RLMIteration,
     RLMMetadata,
     UsageSummary,
+    VideoContext,
 )
 from rlm.environments import BaseEnv, SupportsPersistence, get_environment
 from rlm.logger import RLMLogger, VerbosePrinter
@@ -32,6 +33,7 @@ from rlm.utils.parsing import (
 )
 from rlm.utils.prompts import (
     MM_RLM_SYSTEM_PROMPT,
+    MM_VIDEO_RLM_SYSTEM_PROMPT,
     RLM_SYSTEM_PROMPT,
     QueryMetadata,
     build_rlm_system_prompt,
@@ -252,17 +254,26 @@ class RLM:
             if not self.persistent and hasattr(environment, "cleanup"):
                 environment.cleanup()
 
-    def _setup_prompt(self, prompt: str | dict[str, Any] | ImageContext) -> list[dict[str, Any]]:
+    def _setup_prompt(
+        self, prompt: str | dict[str, Any] | ImageContext | VideoContext
+    ) -> list[dict[str, Any]]:
         """
         Setup the system prompt for the RLM. Also include metadata about the prompt and build
         up the initial message history.
 
-        When prompt is an ImageContext, automatically selects the multimodal system prompt
-        (unless a custom_system_prompt was explicitly provided) and embeds the image in the
-        second message so the root model sees it immediately.
+        When prompt is an ImageContext or VideoContext, automatically selects the appropriate
+        multimodal system prompt (unless a custom_system_prompt was explicitly provided).
         """
         image_context: ImageContext | None = None
-        if isinstance(prompt, ImageContext):
+        video_context: VideoContext | None = None
+
+        if isinstance(prompt, VideoContext):
+            video_context = prompt
+            if self.system_prompt is RLM_SYSTEM_PROMPT:
+                system_prompt = MM_VIDEO_RLM_SYSTEM_PROMPT
+            else:
+                system_prompt = self.system_prompt
+        elif isinstance(prompt, ImageContext):
             image_context = prompt
             # Auto-select the multimodal system prompt when no custom prompt was set.
             if self.system_prompt is RLM_SYSTEM_PROMPT:
@@ -278,6 +289,7 @@ class RLM:
             query_metadata=metadata,
             custom_tools=self.custom_tools,
             image_context=image_context,
+            video_context=video_context,
         )
         if self.compaction:
             message_history[0]["content"] += (
@@ -287,7 +299,9 @@ class RLM:
         return message_history
 
     def completion(
-        self, prompt: str | dict[str, Any] | ImageContext, root_prompt: str | None = None
+        self,
+        prompt: str | dict[str, Any] | ImageContext | VideoContext,
+        root_prompt: str | None = None,
     ) -> RLMChatCompletion:
         """
         Recursive Language Model completion call. This is the main entry point for querying an RLM, and

@@ -1,3 +1,4 @@
+*.jsonl
 # MacOS
 .DS_Store
 

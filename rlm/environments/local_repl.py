@@ -398,14 +398,18 @@ class LocalREPL(NonIsolatedEnv):
         Returns:
             The context index used.
         """
-        from rlm.core.types import ImageContext
+        from rlm.core.types import ImageContext, VideoContext
 
         if context_index is None:
             context_index = self._context_count
 
         var_name = f"context_{context_index}"
 
-        if isinstance(context_payload, ImageContext):
+        if isinstance(context_payload, VideoContext):
+            # Store the VideoContext directly so the model can call .metadata,
+            # .get_frame(), .sample_frames(), etc. in the REPL.
+            self.locals[var_name] = context_payload
+        elif isinstance(context_payload, ImageContext):
             # Load the PIL Image and store it directly in locals.
             pil_image = context_payload.load()
             self.locals[var_name] = pil_image
