@@ -5,10 +5,13 @@ Captures run metadata and iterations in memory so they can be attached to
 RLMChatCompletion.metadata. Optionally writes the same data to JSON-lines files.
 """
 
+import base64
+import io
 import json
 import os
 import uuid
 from datetime import datetime
+from typing import Any
 
 from rlm.core.types import RLMIteration, RLMMetadata
 
@@ -34,6 +37,7 @@ class RLMLogger:
             self.log_file_path = os.path.join(log_dir, f"{file_name}_{timestamp}_{run_id}.jsonl")
 
         self._run_metadata: dict | None = None
+        self._context_data: dict | None = None
         self._iterations: list[dict] = []
         self._iteration_count = 0
         self._metadata_logged = False
@@ -54,6 +58,67 @@ class RLMLogger:
             }
             with open(self.log_file_path, "a") as f:
                 json.dump(entry, f)
+                f.write("\n")
+
+    def log_context(self, context_payload: Any) -> None:
+        """Capture the input context (ImageContext/VideoContext) for visualization."""
+        from rlm.core.types import ImageContext, VideoContext
+
+        entry: dict | None = None
+
+        if isinstance(context_payload, ImageContext):
+            try:
+                img = context_payload.load()
+                thumb = img.copy()
+                thumb.thumbnail((800, 800))
+                if thumb.mode not in ("RGB", "L"):
+                    thumb = thumb.convert("RGB")
+                buf = io.BytesIO()
+                thumb.save(buf, format="JPEG", quality=85)
+                b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+                source_path = context_payload.get_source_path()
+                entry = {
+                    "type": "context",
+                    "context_type": "image",
+                    "image_data": b64,
+                    "source_path": source_path,
+                }
+            except Exception:
+                return
+
+        elif isinstance(context_payload, VideoContext):
+            try:
+                samples = context_payload.sample_frames(n=6)
+                frames = []
+                for ts, img in samples:
+                    thumb = img.copy()
+                    thumb.thumbnail((400, 400))
+                    if thumb.mode not in ("RGB", "L"):
+                        thumb = thumb.convert("RGB")
+                    buf = io.BytesIO()
+                    thumb.save(buf, format="JPEG", quality=80)
+                    b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+                    frames.append({"timestamp": round(ts, 2), "data": b64})
+                meta = context_payload.metadata
+                entry = {
+                    "type": "context",
+                    "context_type": "video",
+                    "frames": frames,
+                    "source_path": context_payload.get_source_path(),
+                    "duration_sec": meta.duration_sec,
+                    "fps": meta.fps,
+                    "resolution": [meta.width, meta.height],
+                }
+            except Exception:
+                return
+
+        if entry is None:
+            return
+
+        self._context_data = entry
+        if self._save_to_disk and self.log_file_path:
+            with open(self.log_file_path, "a") as f:
+                json.dump({"timestamp": datetime.now().isoformat(), **entry}, f)
                 f.write("\n")
 
     def log(self, iteration: RLMIteration) -> None:
@@ -81,10 +146,13 @@ class RLMLogger:
         """Return captured run_metadata + iterations for the current completion, or None if no metadata yet."""
         if self._run_metadata is None:
             return None
-        return {
+        result: dict = {
             "run_metadata": self._run_metadata,
             "iterations": list(self._iterations),
         }
+        if self._context_data is not None:
+            result["context"] = self._context_data
+        return result
 
     @property
     def iteration_count(self) -> int:

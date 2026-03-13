@@ -329,6 +329,8 @@ class RLM:
 
         if self.logger:
             self.logger.clear_iterations()
+            if isinstance(prompt, (ImageContext, VideoContext)):
+                self.logger.log_context(prompt)
 
         with self._spawn_completion_context(prompt) as (lm_handler, environment):
             message_history = self._setup_prompt(prompt)

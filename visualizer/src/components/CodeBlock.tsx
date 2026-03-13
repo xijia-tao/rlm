@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
-import { CodeBlock as CodeBlockType } from '@/lib/types';
+import { CodeBlock as CodeBlockType, isSerializedPILImage } from '@/lib/types';
 import { CodeWithLineNumbers } from './CodeWithLineNumbers';
 
 interface CodeBlockProps {
@@ -119,21 +119,52 @@ export function CodeBlock({ block, index }: CodeBlockProps) {
                     Variables
                   </span>
                 </div>
-                <div className="p-4 grid grid-cols-2 md:grid-cols-3 gap-2">
-                  {Object.entries(block.result.locals).map(([key, value]) => (
-                    <div 
-                      key={key} 
-                      className="bg-background rounded px-2 py-1.5 font-mono text-xs overflow-hidden border border-border"
-                    >
-                      <span className="text-sky-600 dark:text-sky-400">{key}</span>
-                      <span className="text-muted-foreground mx-1">=</span>
-                      <span className="text-amber-600 dark:text-amber-400 truncate">
-                        {typeof value === 'string' 
-                          ? value.length > 30 ? value.slice(0, 30) + '...' : value
-                          : JSON.stringify(value).slice(0, 30)}
-                      </span>
+                <div className="p-4 space-y-2">
+                  {/* PIL image entries — rendered as image cards */}
+                  {Object.entries(block.result.locals)
+                    .filter(([, v]) => isSerializedPILImage(v))
+                    .length > 0 && (
+                    <div className="grid grid-cols-2 gap-2">
+                      {Object.entries(block.result.locals)
+                        .filter(([, v]) => isSerializedPILImage(v))
+                        .map(([key, value]) => {
+                          const img = value as import('@/lib/types').SerializedPILImage;
+                          return (
+                            <div key={key} className="rounded-lg border border-amber-500/30 bg-amber-500/5 dark:bg-amber-400/5 overflow-hidden">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={`data:image/${img.format};base64,${img.data}`}
+                                alt={key}
+                                className="w-full object-contain max-h-40"
+                              />
+                              <div className="px-2 py-1 flex items-center justify-between">
+                                <span className="font-mono text-[10px] text-sky-600 dark:text-sky-400">{key}</span>
+                                <span className="text-[9px] text-muted-foreground font-mono">{img.size[0]}×{img.size[1]}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
                     </div>
-                  ))}
+                  )}
+                  {/* Non-image scalar variables */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {Object.entries(block.result.locals)
+                      .filter(([, v]) => !isSerializedPILImage(v))
+                      .map(([key, value]) => (
+                        <div 
+                          key={key} 
+                          className="bg-background rounded px-2 py-1.5 font-mono text-xs overflow-hidden border border-border"
+                        >
+                          <span className="text-sky-600 dark:text-sky-400">{key}</span>
+                          <span className="text-muted-foreground mx-1">=</span>
+                          <span className="text-amber-600 dark:text-amber-400 truncate">
+                            {typeof value === 'string' 
+                              ? value.length > 30 ? value.slice(0, 30) + '...' : value
+                              : JSON.stringify(value).slice(0, 30)}
+                          </span>
+                        </div>
+                      ))}
+                  </div>
                 </div>
               </div>
             )}

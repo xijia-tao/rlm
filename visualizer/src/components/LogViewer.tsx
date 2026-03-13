@@ -10,7 +10,86 @@ import { TrajectoryPanel } from './TrajectoryPanel';
 import { ExecutionPanel } from './ExecutionPanel';
 import { IterationTimeline } from './IterationTimeline';
 import { ThemeToggle } from './ThemeToggle';
-import { RLMLogFile } from '@/lib/types';
+import { ContextPreview, RLMLogFile } from '@/lib/types';
+
+// ── Context preview panel ────────────────────────────────────────────────────
+
+function ContextPreviewPanel({ preview }: { preview: ContextPreview }) {
+  const [selectedFrame, setSelectedFrame] = useState(0);
+
+  if (preview.context_type === 'image') {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+          Input Image
+        </p>
+        <div className="rounded-lg overflow-hidden border border-border/60 bg-muted/30 flex items-center justify-center" style={{ maxHeight: 120 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`data:image/jpeg;base64,${preview.image_data}`}
+            alt="Input image"
+            className="object-contain max-h-[120px] max-w-full"
+          />
+        </div>
+        {preview.source_path && (
+          <p className="text-[9px] text-muted-foreground truncate font-mono">
+            {preview.source_path.split('/').pop()}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  // Video
+  const frame = preview.frames[selectedFrame];
+  const minutes = Math.floor(preview.duration_sec / 60);
+  const secs = (preview.duration_sec % 60).toFixed(0).padStart(2, '0');
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+          Input Video
+        </p>
+        <span className="text-[9px] text-muted-foreground font-mono">
+          {minutes}:{secs} · {preview.resolution[0]}×{preview.resolution[1]}
+        </span>
+      </div>
+      {/* Main frame */}
+      <div className="rounded-lg overflow-hidden border border-border/60 bg-muted/30 flex items-center justify-center" style={{ maxHeight: 100 }}>
+        {frame && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={`data:image/jpeg;base64,${frame.data}`}
+            alt={`Frame at ${frame.timestamp}s`}
+            className="object-contain max-h-[100px] max-w-full"
+          />
+        )}
+      </div>
+      {/* Frame strip */}
+      <div className="flex gap-1 overflow-x-auto">
+        {preview.frames.map((f, i) => (
+          <button
+            key={i}
+            onClick={() => setSelectedFrame(i)}
+            className={`flex-shrink-0 rounded overflow-hidden border transition-all ${
+              i === selectedFrame ? 'border-primary ring-1 ring-primary' : 'border-border/40 opacity-60 hover:opacity-90'
+            }`}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`data:image/jpeg;base64,${f.data}`}
+              alt={`Frame ${i}`}
+              className="w-12 h-8 object-cover"
+            />
+          </button>
+        ))}
+      </div>
+      {frame && (
+        <p className="text-[9px] text-muted-foreground font-mono">t={frame.timestamp.toFixed(1)}s</p>
+      )}
+    </div>
+  );
+}
 
 interface LogViewerProps {
   logFile: RLMLogFile;
@@ -92,7 +171,13 @@ export function LogViewer({ logFile, onBack }: LogViewerProps) {
           {/* Question & Answer Summary */}
           <Card className="flex-1 bg-gradient-to-r from-primary/5 to-accent/5 border-primary/20">
             <CardContent className="p-4">
-              <div className="grid md:grid-cols-2 gap-4">
+              <div className={`grid gap-4 ${logFile.contextPreview ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
+                {/* Original image/video input */}
+                {logFile.contextPreview && (
+                  <div>
+                    <ContextPreviewPanel preview={logFile.contextPreview} />
+                  </div>
+                )}
                 <div>
                   <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1">
                     Context / Question

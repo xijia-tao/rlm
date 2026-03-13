@@ -1,5 +1,46 @@
 // Types matching the RLM log format
 
+// Serialized PIL image stored in REPL locals
+export interface SerializedPILImage {
+  __type__: 'pil_image';
+  data: string;       // base64-encoded JPEG
+  format: string;     // 'jpeg'
+  mode: string;       // e.g. 'RGB'
+  size: [number, number]; // [original_width, original_height]
+}
+
+export function isSerializedPILImage(value: unknown): value is SerializedPILImage {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as Record<string, unknown>).__type__ === 'pil_image' &&
+    typeof (value as Record<string, unknown>).data === 'string'
+  );
+}
+
+// Context preview (image or video) stored at the top of the JSONL
+export interface ImageContextPreview {
+  context_type: 'image';
+  image_data: string;   // base64-encoded JPEG
+  source_path: string | null;
+}
+
+export interface VideoFramePreview {
+  timestamp: number;
+  data: string; // base64-encoded JPEG
+}
+
+export interface VideoContextPreview {
+  context_type: 'video';
+  frames: VideoFramePreview[];
+  source_path: string | null;
+  duration_sec: number;
+  fps: number;
+  resolution: [number, number];
+}
+
+export type ContextPreview = ImageContextPreview | VideoContextPreview;
+
 export interface RLMChatCompletion {
   prompt: string | Record<string, unknown>;
   response: string;
@@ -50,6 +91,7 @@ export interface RLMLogFile {
   iterations: RLMIteration[];
   metadata: LogMetadata;
   config: RLMConfigMetadata;
+  contextPreview: ContextPreview | null;
 }
 
 export interface LogMetadata {

@@ -1,4 +1,4 @@
-import { RLMIteration, RLMLogFile, LogMetadata, RLMConfigMetadata, extractFinalAnswer } from './types';
+import { RLMIteration, RLMLogFile, LogMetadata, RLMConfigMetadata, ContextPreview, extractFinalAnswer } from './types';
 
 // Extract the context variable from code block locals
 export function extractContextVariable(iterations: RLMIteration[]): string | null {
@@ -32,18 +32,19 @@ function getDefaultConfig(): RLMConfigMetadata {
 export interface ParsedJSONL {
   iterations: RLMIteration[];
   config: RLMConfigMetadata;
+  contextPreview: ContextPreview | null;
 }
 
 export function parseJSONL(content: string): ParsedJSONL {
   const lines = content.trim().split('\n').filter(line => line.trim());
   const iterations: RLMIteration[] = [];
   let config: RLMConfigMetadata = getDefaultConfig();
+  let contextPreview: ContextPreview | null = null;
   
   for (const line of lines) {
     try {
       const parsed = JSON.parse(line);
       
-      // Check if this is a metadata entry
       if (parsed.type === 'metadata') {
         config = {
           root_model: parsed.root_model ?? null,
@@ -55,6 +56,23 @@ export function parseJSONL(content: string): ParsedJSONL {
           environment_kwargs: parsed.environment_kwargs ?? null,
           other_backends: parsed.other_backends ?? null,
         };
+      } else if (parsed.type === 'context') {
+        if (parsed.context_type === 'image') {
+          contextPreview = {
+            context_type: 'image',
+            image_data: parsed.image_data ?? '',
+            source_path: parsed.source_path ?? null,
+          };
+        } else if (parsed.context_type === 'video') {
+          contextPreview = {
+            context_type: 'video',
+            frames: parsed.frames ?? [],
+            source_path: parsed.source_path ?? null,
+            duration_sec: parsed.duration_sec ?? 0,
+            fps: parsed.fps ?? 0,
+            resolution: parsed.resolution ?? [0, 0],
+          };
+        }
       } else {
         // This is an iteration entry
         iterations.push(parsed as RLMIteration);
@@ -64,7 +82,7 @@ export function parseJSONL(content: string): ParsedJSONL {
     }
   }
   
-  return { iterations, config };
+  return { iterations, config, contextPreview };
 }
 
 export function extractContextQuestion(iterations: RLMIteration[]): string {
@@ -167,7 +185,7 @@ export function computeMetadata(iterations: RLMIteration[]): LogMetadata {
 }
 
 export function parseLogFile(fileName: string, content: string): RLMLogFile {
-  const { iterations, config } = parseJSONL(content);
+  const { iterations, config, contextPreview } = parseJSONL(content);
   const metadata = computeMetadata(iterations);
   
   return {
@@ -176,6 +194,7 @@ export function parseLogFile(fileName: string, content: string): RLMLogFile {
     iterations,
     metadata,
     config,
+    contextPreview,
   };
 }
 

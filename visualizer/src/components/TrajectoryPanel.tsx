@@ -1,9 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-import { RLMIteration, extractFinalAnswer } from '@/lib/types';
+import { RLMIteration, SerializedPILImage, extractFinalAnswer, isSerializedPILImage } from '@/lib/types';
 
 interface TrajectoryPanelProps {
   iterations: RLMIteration[];
@@ -66,11 +67,104 @@ function RoleLabel({ role }: { role: string }) {
   );
 }
 
+// ── PIL image gallery ────────────────────────────────────────────────────────
+
+interface LabeledImage {
+  varName: string;
+  image: SerializedPILImage;
+  blockIndex: number;
+}
+
+function collectPILImages(iteration: RLMIteration): LabeledImage[] {
+  const images: LabeledImage[] = [];
+  for (let bi = 0; bi < iteration.code_blocks.length; bi++) {
+    const block = iteration.code_blocks[bi];
+    if (!block.result?.locals) continue;
+    for (const [key, value] of Object.entries(block.result.locals)) {
+      if (isSerializedPILImage(value)) {
+        images.push({ varName: key, image: value, blockIndex: bi });
+      }
+    }
+  }
+  return images;
+}
+
+function PILImageGallery({ images }: { images: LabeledImage[] }) {
+  const [selected, setSelected] = useState(0);
+  if (images.length === 0) return null;
+  const current = images[Math.min(selected, images.length - 1)];
+
+  return (
+    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 dark:bg-amber-400/5 p-4">
+      {/* Header */}
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center">
+          <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+        </div>
+        <span className="font-semibold text-sm text-amber-700 dark:text-amber-400">
+          Visual Variables
+        </span>
+        <Badge variant="outline" className="ml-auto text-[10px] border-amber-500/30 text-amber-700 dark:text-amber-400">
+          {images.length} image{images.length !== 1 ? 's' : ''}
+        </Badge>
+      </div>
+
+      {/* Main image */}
+      <div className="mb-3 rounded-lg overflow-hidden border border-border/60 bg-black/10 flex items-center justify-center min-h-[120px]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={`data:image/${current.image.format};base64,${current.image.data}`}
+          alt={current.varName}
+          className="max-h-64 max-w-full object-contain"
+        />
+      </div>
+
+      {/* Var name + size */}
+      <div className="flex items-center justify-between mb-2">
+        <span className="font-mono text-xs text-sky-600 dark:text-sky-400">
+          {current.varName}
+        </span>
+        <span className="text-[10px] text-muted-foreground font-mono">
+          {current.image.size[0]}×{current.image.size[1]} · block #{current.blockIndex + 1}
+        </span>
+      </div>
+
+      {/* Thumbnail strip (when multiple images) */}
+      {images.length > 1 && (
+        <div className="flex gap-1.5 overflow-x-auto mt-2">
+          {images.map((img, i) => (
+            <button
+              key={i}
+              onClick={() => setSelected(i)}
+              className={`flex-shrink-0 rounded overflow-hidden border transition-all ${
+                i === selected
+                  ? 'border-amber-500 ring-1 ring-amber-500'
+                  : 'border-border/40 opacity-60 hover:opacity-90'
+              }`}
+              title={img.varName}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`data:image/${img.image.format};base64,${img.image.data}`}
+                alt={img.varName}
+                className="w-14 h-10 object-cover"
+              />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function TrajectoryPanel({ 
   iterations, 
   selectedIteration, 
 }: TrajectoryPanelProps) {
   const currentIteration = iterations[selectedIteration];
+  const pilImages = currentIteration ? collectPILImages(currentIteration) : [];
 
   return (
     <div className="h-full flex flex-col bg-background overflow-hidden">
@@ -173,6 +267,11 @@ export function TrajectoryPanel({
                   </pre>
                 </div>
               </div>
+            )}
+
+            {/* PIL image gallery */}
+            {pilImages.length > 0 && (
+              <PILImageGallery images={pilImages} />
             )}
 
             {/* Final answer highlight */}

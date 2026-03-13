@@ -17,6 +17,38 @@ ClientBackend = Literal[
 EnvironmentType = Literal["local", "docker", "modal", "prime", "daytona", "e2b"]
 
 
+def _serialize_pil_image(value: Any) -> dict | None:
+    """Serialize a PIL Image to a base64 JSON dict. Returns None if not a PIL Image."""
+    try:
+        from PIL import Image
+
+        if not isinstance(value, Image.Image):
+            return None
+    except ImportError:
+        return None
+
+    import base64
+    import io
+
+    original_size = [value.width, value.height]
+    img = value.copy()
+    # Downsample large images to keep log sizes reasonable
+    if img.width > 512 or img.height > 512:
+        img.thumbnail((512, 512), Image.LANCZOS)
+    if img.mode not in ("RGB", "L"):
+        img = img.convert("RGB")
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=80)
+    b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+    return {
+        "__type__": "pil_image",
+        "data": b64,
+        "format": "jpeg",
+        "mode": value.mode,
+        "size": original_size,
+    }
+
+
 def _serialize_value(value: Any) -> Any:
     """Convert a value to a JSON-serializable representation."""
     if value is None or isinstance(value, (bool, int, float, str)):
@@ -29,6 +61,10 @@ def _serialize_value(value: Any) -> Any:
         return {str(k): _serialize_value(v) for k, v in value.items()}
     if callable(value):
         return f"<{type(value).__name__} '{getattr(value, '__name__', repr(value))}'>"
+    # Detect PIL Images and serialize as base64
+    pil_result = _serialize_pil_image(value)
+    if pil_result is not None:
+        return pil_result
     # Try to convert to string for other types
     try:
         return repr(value)
