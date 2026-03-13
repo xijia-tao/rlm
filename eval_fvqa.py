@@ -120,7 +120,7 @@ def build_rlm(model_name: str, base_url: str, api_key: str, question_id: str,
         },
         environment="local",
         max_depth=1,
-        max_iterations=10,
+        max_iterations=5,
         verbose=False,
         logger=logger,
         custom_tools={"image_search": image_search_tool_spec},
@@ -308,51 +308,74 @@ def evaluate_fvqa(
     total = 0
     t0 = time.time()
 
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        futures = {
-            executor.submit(
-                _run_one,
-                question_id, question, ground_truth, query_image,
-                model_name, base_url, api_key, cache_path, log_dir,
-            ): question_id
-            for question_id, question, ground_truth, query_image in pending
-        }
+    # with ThreadPoolExecutor(max_workers=workers) as executor:
+    #     futures = {
+    #         executor.submit(
+    #             _run_one,
+    #             question_id, question, ground_truth, query_image,
+    #             model_name, base_url, api_key, cache_path, log_dir,
+    #         ): question_id
+    #         for question_id, question, ground_truth, query_image in pending
+    #     }
 
-        for future in as_completed(futures):
-            question_id = futures[future]
-            try:
-                record = future.result()
-            except Exception as exc:
-                record = {
-                    "data_id": question_id,
-                    "question": "",
-                    "ground_truth": "",
-                    "pred_raw": "",
-                    "pred": "",
-                    "correct": False,
-                    "error": str(exc),
-                }
+    #     for future in as_completed(futures):
+    #         question_id = futures[future]
+    #         try:
+    #             record = future.result()
+    #         except Exception as exc:
+    #             record = {
+    #                 "data_id": question_id,
+    #                 "question": "",
+    #                 "ground_truth": "",
+    #                 "pred_raw": "",
+    #                 "pred": "",
+    #                 "correct": False,
+    #                 "error": str(exc),
+    #             }
 
-            append_result(output_path, record)
+    #         append_result(output_path, record)
 
-            if record["correct"]:
-                correct += 1
-            total += 1
+    #         if record["correct"]:
+    #             correct += 1
+    #         total += 1
 
-            elapsed = time.time() - t0
-            avg_sec = elapsed / total
-            remaining = (len(pending) - total) * avg_sec
-            status = "✓" if record["correct"] else "✗"
-            error_suffix = f"  [ERR: {record['error'][:60]}]" if record.get("error") else ""
-            print(
-                f"[{total}/{len(pending)}] "
-                f"acc={correct/total:.3f}  "
-                f"id={record['data_id']}  "
-                f"gold='{record['ground_truth']}'  pred='{record['pred']}'  "
-                f"{status}  "
-                f"elapsed={elapsed:.0f}s  eta={remaining:.0f}s"
-                f"{error_suffix}"
-            )
+    #         elapsed = time.time() - t0
+    #         avg_sec = elapsed / total
+    #         remaining = (len(pending) - total) * avg_sec
+    #         status = "✓" if record["correct"] else "✗"
+    #         error_suffix = f"  [ERR: {record['error'][:60]}]" if record.get("error") else ""
+    #         print(
+    #             f"[{total}/{len(pending)}] "
+    #             f"acc={correct/total:.3f}  "
+    #             f"id={record['data_id']}  "
+    #             f"gold='{record['ground_truth']}'  pred='{record['pred']}'  "
+    #             f"{status}  "
+    #             f"elapsed={elapsed:.0f}s  eta={remaining:.0f}s"
+    #             f"{error_suffix}"
+    #         )
+    for question_id, question, ground_truth, query_image in pending:
+        record = _run_one(
+            question_id, question, ground_truth, query_image,
+            model_name, base_url, api_key, cache_path, log_dir,
+        )
+        append_result(output_path, record)
+        if record["correct"]:
+            correct += 1
+        total += 1
+        elapsed = time.time() - t0
+        avg_sec = elapsed / total
+        remaining = (len(pending) - total) * avg_sec
+        status = "✓" if record["correct"] else "✗"
+        error_suffix = f"  [ERR: {record['error'][:60]}]" if record.get("error") else ""
+        print(
+            f"[{total}/{len(pending)}] "
+            f"acc={correct/total:.3f}  "
+            f"id={record['data_id']}  "
+            f"gold='{record['ground_truth']}'  pred='{record['pred']}'  "
+            f"{status}  "
+            f"elapsed={elapsed:.0f}s  eta={remaining:.0f}s"
+            f"{error_suffix}"
+        )
 
     # -----------------------------------------------------------------------
     # Final evaluation over the full output file (includes previous runs)

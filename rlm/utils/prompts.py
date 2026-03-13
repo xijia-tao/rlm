@@ -202,8 +202,8 @@ print(meta)  # duration, fps, resolution
 sampled = context.sample_frames(8)
 descriptions = []
 for t, frame in sampled:
-    desc = view_image(frame.resize((512, 512)), f"At {t:.1f}s: briefly describe the main action or scene.")
-    descriptions.append(f"t={t:.1f}s: {desc}")
+    desc = view_image(frame.resize((512, 512)), f"At {{t:.1f}}s: briefly describe the main action or scene.")
+    descriptions.append(f"t={{t:.1f}}s: {{desc}}")
     print(descriptions[-1])
 ```
 
@@ -211,7 +211,7 @@ for t, frame in sampled:
 # Step 3: if a specific moment is relevant, zoom in
 frame = context.get_frame(12.5)
 detail = view_image(frame.resize((768, 768)), "What specific object or action is visible here?")
-final_answer = llm_query(f"Based on these video observations:\\n" + "\\n".join(descriptions) + f"\\nDetail at 12.5s: {detail}\\nAnswer the question: {{question}}")
+final_answer = llm_query(f"Based on these video observations:\\n" + "\\n".join(descriptions) + f"\\nDetail at 12.5s: {{detail}}\\nAnswer the question: {{question}}")
 ```
 
 When you want to execute Python code in the REPL, wrap it in triple backticks with 'repl'. When done, provide your final answer using:

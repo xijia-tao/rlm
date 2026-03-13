@@ -100,26 +100,12 @@ image_search_tool_spec = {
 # Run the RLM
 # ---------------------------------------------------------------------------
 
-# rlm = RLM(
-#     backend="openai",
-#     backend_kwargs={
-#         "model_name": "Qwen/Qwen3-VL-8B-Instruct",
-#         "base_url": "http://localhost:11434/v1",
-#         "api_key": "openai",
-#     },
-#     environment="local",
-#     max_depth=1,
-#     max_iterations=10,
-#     verbose=True,
-#     custom_tools={"image_search": image_search_tool_spec},
-# )
-
 rlm = RLM(
     backend="openai",
     backend_kwargs={
-        "model_name": "gemini-3-flash-preview", # "gemini-3.1-pro-preview",
-        "base_url": "https://yunwu.ai/v1",
-        "api_key": os.environ.get("YUNWU_API_KEY"),
+        "model_name": "Qwen/Qwen3-VL-8B-Instruct",
+        "base_url": "http://localhost:11434/v1",
+        "api_key": "openai",
     },
     environment="local",
     max_depth=1,
@@ -127,6 +113,20 @@ rlm = RLM(
     verbose=True,
     custom_tools={"image_search": image_search_tool_spec},
 )
+
+# rlm = RLM(
+#     backend="openai",
+#     backend_kwargs={
+#         "model_name": "gemini-3-flash-preview", # "gemini-3.1-pro-preview",
+#         "base_url": "https://yunwu.ai/v1",
+#         "api_key": os.environ.get("YUNWU_API_KEY"),
+#     },
+#     environment="local",
+#     max_depth=1,
+#     max_iterations=5,
+#     verbose=True,
+#     custom_tools={"image_search": image_search_tool_spec},
+# )
 
 # The query image is the context; the question is the root_prompt.
 # The model will call view_image() to inspect the query image, then optionally
