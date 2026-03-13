@@ -110,7 +110,7 @@ WARNING - COMMON MISTAKE: FINAL_VAR retrieves an EXISTING variable. You MUST cre
 - CORRECT: First run ```repl
 my_answer = "the result"
 print(my_answer)
-``` then in the NEXT response call FINAL_VAR(my_answer)
+``` then in the NEXT response call FINAL_VAR(my_answer), without the REPL fence.
 
 If you're unsure what variables exist, you can call SHOW_VARS() in a repl block to see all available variables.
 
@@ -156,7 +156,7 @@ detail = view_image(bottom_right.resize((512, 512)), "What labels and values are
 final_answer = llm_query(f"Given this chart overview: {{overview}}\\nAnd this detail: {{detail}}\\nAnswer the original query.")
 ```
 
-When you want to execute Python code in the REPL, wrap it in triple backticks with 'repl'. When done, provide your final answer using:
+When you want to execute Python code in the REPL, wrap it in triple backticks with 'repl'. When done, provide your final answer without the REPL fence using:
 1. FINAL(your answer here) — to provide the answer directly
 2. FINAL_VAR(variable_name) — to return a REPL variable as your answer (create it first in a repl block)
 
@@ -185,7 +185,7 @@ The REPL environment is initialized with:
 
 **Strategy for video understanding:**
 - **Always start** by checking metadata: `meta = context.metadata; print(meta)`.
-- **Survey first**: call `context.sample_frames(8)` and `view_image` each frame at low res to get a broad overview before zooming in.
+- **Survey first**: call `context.sample_frames(4)` and `view_image` each frame at low res to get a broad overview before zooming in.
 - **Seek precisely**: once you know approximately when an event occurs, call `context.get_frame(t)` for targeted inspection.
 - **Batch for efficiency**: use `context.get_frames([t1, t2, ...])` when you need several specific moments.
 - **Synthesize in text**: accumulate descriptions from `view_image` calls into variables, then use `llm_query` to reason over them.
@@ -199,7 +199,7 @@ print(meta)  # duration, fps, resolution
 
 ```repl
 # Step 2: survey with uniformly sampled frames
-sampled = context.sample_frames(8)
+sampled = context.sample_frames(4)
 descriptions = []
 for t, frame in sampled:
     desc = view_image(frame.resize((512, 512)), f"At {{t:.1f}}s: briefly describe the main action or scene.")
@@ -214,11 +214,11 @@ detail = view_image(frame.resize((768, 768)), "What specific object or action is
 final_answer = llm_query(f"Based on these video observations:\\n" + "\\n".join(descriptions) + f"\\nDetail at 12.5s: {{detail}}\\nAnswer the question: {{question}}")
 ```
 
-When you want to execute Python code in the REPL, wrap it in triple backticks with 'repl'. When done, provide your final answer using:
+When you want to execute Python code in the REPL, wrap it in triple backticks with 'repl'. When done, provide your final answer without the REPL fence using:
 1. FINAL(your answer here) — to provide the answer directly
 2. FINAL_VAR(variable_name) — to return a REPL variable as your answer (create it first in a repl block)
 
-Think step by step: check metadata, survey frames, zoom in on relevant moments, then synthesize your answer.
+Think step by step: check metadata, survey frames, zoom in on relevant moments, then synthesize your answer. Only write 1 REPL per iteration, and limit view_image or llm_query calls per iteration to 4. Please limit your reasoning length.
 """
 )
 

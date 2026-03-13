@@ -1,1 +1,1 @@
-vllm serve Qwen/Qwen3-VL-8B-Instruct --port 11434 --host 0.0.0.0  --max-model-len 80000 --gpu-memory-utilization 0.6
+vllm serve Qwen/Qwen3-VL-32B-Instruct --port 11434 --host 0.0.0.0  --max-model-len 10000 --gpu-memory-utilization 0.95 --max-num-seq 2

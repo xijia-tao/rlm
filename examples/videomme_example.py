@@ -98,7 +98,7 @@ root_prompt = (
 rlm = RLM(
     backend="openai",
     backend_kwargs={
-        "model_name": "Qwen/Qwen3-VL-8B-Instruct",
+        "model_name": "Qwen/Qwen3-VL-32B-Instruct",
         "base_url": "http://localhost:11434/v1",
         "api_key": "openai",
     },
