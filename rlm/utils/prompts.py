@@ -105,12 +105,10 @@ IMPORTANT: When you are done with the iterative process, you MUST provide a fina
 1. Use FINAL(your final answer here) to provide the answer directly
 2. Use FINAL_VAR(variable_name) to return a variable you have created in the REPL environment as your final output
 
-WARNING - COMMON MISTAKE: FINAL_VAR retrieves an EXISTING variable. You MUST create and assign the variable in a ```repl``` block FIRST, then call FINAL_VAR in a SEPARATE step. For example:
-- WRONG: Calling FINAL_VAR(my_answer) without first creating `my_answer` in a repl block
-- CORRECT: First run ```repl
-my_answer = "the result"
-print(my_answer)
-``` then in the NEXT response call FINAL_VAR(my_answer), without the REPL fence.
+NOTE: FINAL_VAR and FINAL(variable_name) both resolve the variable from the REPL environment. You can call them in the same response as the repl block that creates the variable, or in a later response. For example:
+- OK (same response): Create `my_answer` in a repl block, then write FINAL_VAR(my_answer) or FINAL(my_answer) after the block in the same response.
+- OK (later response): Create `my_answer` in a repl block in one response, then write FINAL_VAR(my_answer) in the next.
+- WRONG: Calling FINAL_VAR(my_answer) or FINAL(my_answer) without ever creating `my_answer` in a repl block.
 
 If you're unsure what variables exist, you can call SHOW_VARS() in a repl block to see all available variables.
 

@@ -65,7 +65,20 @@ def find_final_answer(text: str, environment: "BaseEnv | None" = None) -> str | 
     final_pattern = r"^\s*FINAL\((.*)\)\s*$"
     match = re.search(final_pattern, text, re.MULTILINE | re.DOTALL)
     if match:
-        return match.group(1).strip()
+        content = match.group(1).strip()
+        # If content is a valid Python identifier, try to resolve it as a REPL variable.
+        # This handles the case where the model writes a repl block and FINAL(var) in the
+        # same turn: the repl block runs first, so the variable is already in locals.
+        if environment is not None and content.isidentifier():
+            result = environment.execute_code(f"print(FINAL_VAR({content!r}))")
+            resolved = result.stdout.strip()
+            if resolved and not (
+                "Variable '" in resolved
+                and "' not found" in resolved
+                and "FINAL_VAR" in resolved
+            ):
+                return resolved
+        return content
 
     return None
 
